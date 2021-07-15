@@ -4,16 +4,15 @@ Yet Another Reflow Oven. An open source DIY Reflow Hotplate and Vapour phase con
 ### Result
 
 ### Project origin
-I wanted to have a reflow oven so I could easilly solder electronic prototypes. After looking around I found plenty of DIY projects but none of them fitted my needs (also I like doing things my way). The big disadvantage of these projects is that they use an arduino in combination with a cheap solid state relay that is not suited for phase angle control.
-
-#### What is the best soldering technique and device to build?
+I wanted to have a reflow oven so I could easilly solder electronic prototypes. After looking around I found plenty of DIY projects but none of them fitted my needs.
+#### Which type of device would I need?
 After looking around the internet there are multiple automated soldering techniques / machines.
 - vapour phase
 - Infrared reflow oven
 - Convection reflow oven
 - Hotplate
 
-After reading all the marketing material from several vapour phase reflow oven manufacturers I settled for vapour phase as method of choice. Main reasoning at the time: _just heat up the "Vapour phase Galden" in a closed container with your pcb in it, no fears of overheating or difficult reflow profiles to implement._
+After reading all the marketing material from several vapour phase reflow oven manufacturers I settled for vapour phase as method of choice. Main reasoning at the time: _just heat up the Galden (special fluid) in a closed container with your pcb in it, no fears of overheating or difficult reflow profiles to implement._
 However I later changed my mind, after a failed DIY vapour phase oven attempt, and decided to build a Infrared reflow oven instead. In addition I also build a PCB preheater/reflow hotplate because I had a failed preheater project laying around.
 
 ### Build first Think later
@@ -44,6 +43,6 @@ So DIY it is.
 ### Purchase YARO?
 It's 100% opensource so you can build it yourself and even improve and modify the design, I highly recommend doing so. However if you would like to purchase preassembled PCB's, I have some laying around I I'm willing to sell. If their is a enough interest I will consider doing a small production run and make these available for purchase as well. Let my know by sending me an email tomklijn@outlook.com.
 ### Support
-If you would like to support me you could buy me a coffee -> [Click Here](http://buymeacoffee.com/tomklijn) 
+If you would like to support me you can do so by buying me a coffee -> [Click Here](http://buymeacoffee.com/tomklijn) 
 
 If you need support regarding this project just leave a comment on this github page I'll try to answer it as soon as possible.

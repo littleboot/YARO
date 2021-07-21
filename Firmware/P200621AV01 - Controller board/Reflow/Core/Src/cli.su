@@ -1,0 +1,4 @@
+cli.c:55:16:CLI_ValidateSyntax	12	static
+cli.c:35:6:CLI_AddCmd	16	static
+cli.c:90:9:CLI_RunCmd	232	static
+cli.c:185:9:CLI_Help	48	static

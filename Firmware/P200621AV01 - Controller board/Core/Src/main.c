@@ -1,0 +1,1780 @@
+/* USER CODE BEGIN Header */
+/**
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ *
+ *
+ ******************************************************************************
+ */
+
+/**
+ * #CLI update UART RX implementation, use (char detection hardware), DMA?
+ *
+ * BUGS:
+ * #Mains freq keeps value after mains power is removed, (FIX: clear val after x timer ovf's)
+ *
+ *	#Check what missing resistor is for, PCB left to rtd ic
+ *	#Custom tempsensor library,
+ *
+ */
+
+/*FAN     : J3: PA1 */
+/*Heater 1: J4: PB10 */
+/*Heater 2: J5: PB11*/
+
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include <stdlib.h> //atoi
+#include <stdbool.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "cli.h"
+#include "Max31865.h"
+#include "display.h"
+#include "arm_math.h"
+#include "stm32f1xx_hal.h"
+#include "stm32_hal_legacy.h"
+
+
+//#define MANUAL_OVERWRITE_PID
+
+/* PID parameters */
+#ifdef HOTPLATE
+////GOOD
+//#define PID_PARAM_KP        1.25          /* Proportional  */
+//#define PID_PARAM_KI        0.005       /* Integral */
+//#define PID_PARAM_KD        8 			/* Derivative Increased */
+
+#define PID_PARAM_KP        1.3          /* Proportional  */
+#define PID_PARAM_KI        0.0053       /* Integral  */
+#define PID_PARAM_KD        8           /* Derivative increased */
+
+#endif
+#ifdef REFLOW
+//#define PID_PARAM_KP        0.71179          /* Proportional */
+//#define PID_PARAM_KI        0.0018751       /* Integral  */
+//#define PID_PARAM_KD        6.0746           /* Derivative */
+
+//#define PID_PARAM_KP        0.66992          /* Proportional */
+//#define PID_PARAM_KI        0.0015681       /* Integral  */
+//#define PID_PARAM_KD        0           /* Derivative */
+
+//#define PID_PARAM_KP        0.18475          /* Proportional */
+//#define PID_PARAM_KI        0.00049       /* Integral  */
+//#define PID_PARAM_KD        0           /* Derivative */
+
+//#define PID_PARAM_KP        0.673          /* Proportional */
+//#define PID_PARAM_KI        0.0014432       /* Integral  */
+//#define PID_PARAM_KD        0           /* Derivative */
+
+
+#define PID_PARAM_KP        0.43          /* Proportional */
+#define PID_PARAM_KI        0.00064       /* Integral  */
+#define PID_PARAM_KD        19.5           /* Derivative */
+
+#endif
+
+
+/* DFU Bootloader flag, and RTC bku reg add*/
+#define DFU_FLG 121
+#define DFU_FLG_BKU_REG 1
+
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+#ifndef __GNUC__
+#error The implementation of printf to use the UART peripheral is compiler dependent, Only GNU GCC is suported by this code.
+/* The function used also depends on the used libraries, check linker options */
+#endif /* __GNUC__ */
+
+#ifdef DEBUG
+#define trace(...) printf(__VA_ARGS__)
+#else
+#define trace(...)
+#endif
+
+#define UART1_START_RX_IT() HAL_UART_Receive_IT(&huart1, (uint8_t *)(&uart1RxBuff[uart1RxBuffLoc]), 1)
+#define UART2_START_RX_IT() HAL_UART_Receive_IT(&huart2, (uint8_t *)(&uart2RxBuff[uart2RxBuffLoc]), 1)
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+RTC_HandleTypeDef hrtc;
+
+SPI_HandleTypeDef hspi1;
+
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
+
+UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
+
+/* USER CODE BEGIN PV */
+void JumpToBootloader(void);
+
+/* Command Line Interface (CLI) vars */
+#define UART1_RX_BUFF_SIZE 50 // UART RX  buffer size
+#define UART2_RX_BUFF_SIZE 50 // UART RX  buffer size
+static uint8_t cmdRdyFlg = 0;
+static uint8_t dispCmdRdyFlg = 0;
+static uint32_t uart1RxBuffLoc = 0;
+static uint32_t uart2RxBuffLoc = 0;
+static char uart1RxBuff[UART1_RX_BUFF_SIZE] = { '\0' };
+static char uart2RxBuff[UART2_RX_BUFF_SIZE] = { '\0' };
+
+/* Mains frequency measurement vars*/
+volatile uint32_t zcIcPrev = 0; // Previous zero cross input capture timer count, used for mains period freq determination.
+volatile uint32_t zcIcCurr = 0; // Next ""
+volatile uint32_t mainsPeriod = 0; //Timer period not time 100=50hZ 120=60hz
+
+/* AC channel configurations */
+volatile loadConf_t J3_Conf = {
+		.instance = load_J3,
+		.mode = onoffCtrl,
+		.powerPercent = 0,
+		.GPIO_Port = J3_GPIO_Port,
+		.GPIO_Pin = J3_Pin,
+		.timerChannel =  TIM_CHANNEL_2,
+		.isSet = false
+}; /*FAN: J3: PA1 */
+
+volatile loadConf_t J4_Conf = {
+		.instance = load_J4,
+		.mode = onoffCtrl,
+		.powerPercent = 0,
+		.GPIO_Port = J4_GPIO_Port,
+		.GPIO_Pin = J4_Pin,
+		.timerChannel =  TIM_CHANNEL_3,
+		.isSet = false
+}; /*Heater 1: J4: PB10 */
+
+volatile loadConf_t J5_Conf = {
+		.instance = load_J5,
+		.mode = phaseAngleCtrl,
+		.powerPercent = 0,
+		.GPIO_Port = J5_GPIO_Port,
+		.GPIO_Pin = J5_Pin,
+		.timerChannel =  TIM_CHANNEL_4,
+		.isSet = false
+}; /*Heater 2: J5: PB11*/
+
+/* PID controller */
+arm_pid_instance_f32 PID; //RM PID Instance, float_32 format
+float setpoint = 150;
+float error = 0;
+uint32_t pidOutput = 0;
+
+bool pidIsActive = false;
+
+/* Temp sensor */
+Max31865_t  pt100;
+bool        pt100isOK;
+float       pt100Temp;
+float t;
+
+/* time management main loop*/
+uint32_t prevTime = 0;
+uint32_t currTime = 0;
+
+uint32_t tempUpdateTime = 0;
+const uint32_t tempUpdateInterval = 500;
+
+uint32_t pidUpdateTime = 0;
+const uint32_t pidUpdateInterval = 500;
+
+uint32_t dispUpdateTime = 0;
+const uint32_t dispUpdateInterval = 200;
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_SPI1_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_TIM4_Init(void);
+static void MX_USART1_UART_Init(void);
+static void MX_USART2_UART_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM1_Init(void);
+static void MX_RTC_Init(void);
+/* USER CODE BEGIN PFP */
+uint8_t setPage(uint8_t *resp, uint8_t *page);
+
+uint8_t cmd_MAX31865_RegisterWrite(uint8_t *resp, uint8_t *regAdd,
+		uint8_t *regVal);
+uint8_t cmd_MAX31865_RegisterRead(uint8_t *resp, uint8_t *regAdd);
+uint8_t cmd_MAX31865_temp(uint8_t *resp);
+uint8_t cmd_setRelay(uint8_t *resp, uint8_t *newState);
+uint8_t cmd_Reset(char *resp);
+uint8_t cmd_getMainsPeriod(char *resp);
+uint8_t cmd_getMainsFreq(char *resp);
+uint8_t cmd_setMode(char *resp, char *target, char *ctrlMode);
+uint8_t cmd_setPower(char *resp, char *target, char *powerPercent);
+uint8_t cmd_led(char *resp, char *p1);
+uint8_t cmd_setPid(char *resp, char *state);
+uint8_t cmd_setSetpoint(char *resp, char *newSetpoint);
+uint8_t cmd_tone(char *resp,char *freq, char *duration);
+uint8_t cmd_dispProgMode(char *resp, char *duration);
+uint8_t cmd_dfu(char *resp);
+
+uint8_t mux_set(rtdmux_t connDesig);
+
+uint16_t map(int32_t x, int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max);
+
+uint8_t updateLoad(volatile loadConf_t *targetConf);
+
+uint32_t rtc_read_backup_reg(uint32_t BackupRegister);
+void rtc_write_backup_reg(uint32_t BackupRegister, uint32_t data);
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+	//TODO Check if this the jump to bootloader can be moved to CLI command, note system deinit required before call
+	//If this works a power cycle after programming is not needed, and reading/writing the RTC BKU regs not needed.
+	if( rtc_read_backup_reg(DFU_FLG_BKU_REG) == DFU_FLG) JumpToBootloader();
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_SPI1_Init();
+  MX_TIM2_Init();
+  MX_TIM4_Init();
+  MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
+  MX_TIM3_Init();
+  MX_TIM1_Init();
+  MX_RTC_Init();
+  /* USER CODE BEGIN 2 */
+	/* print welcome message */
+	printf("Hello I'm the Reflow oven Control Board\n");
+	printf("For all commands type 'help'\n");
+	printf("Firmware compiled on %s %s\n\n", __DATE__, __TIME__);
+	trace("NOTE DEBUG MODE ACTIVE\n\n");
+
+	/* Add CLI commands */
+	CLI_AddCmd("help", "Shows all cmd's", 0, CLI_Help);
+	CLI_AddCmd("reset", "Reset the device", 0, cmd_Reset);
+	CLI_AddCmd("page", "Go to page nextion", 1, setPage);
+	CLI_AddCmd("spiWrite", "write reg", 2, cmd_MAX31865_RegisterWrite);
+	CLI_AddCmd("spiRead", "write reg", 1, cmd_MAX31865_RegisterRead);
+	CLI_AddCmd("pt100", "get temp", 0, cmd_MAX31865_temp);
+	CLI_AddCmd("relay", "Turn power relay on/off $p1 'on', 'off'", 1, cmd_setRelay);
+
+//	CLI_AddCmd("mainsperiod", "Get mains period in timer ticks", 0,	cmd_getMainsPeriod);
+	CLI_AddCmd("mains", "Get mains frequency", 0, cmd_getMainsFreq);
+
+	CLI_AddCmd("mode","Target $p1 'J3' 'J4' J5', $p2 ctrlMode 'phase' or 'onoff'", 2, cmd_setMode);
+	CLI_AddCmd("set","Target $p1 'J3' 'J4' J5', $p2 power percentage '0'-'100'", 2, cmd_setPower);
+
+	CLI_AddCmd("led", "%p1 'on' 'off' 'toggle'", 1, cmd_led);
+	CLI_AddCmd("setpoint", "change target setpoint", 1, cmd_setSetpoint );
+	CLI_AddCmd("pid", "set pid state 'on' 'off' 'reset'", 1, cmd_setPid );
+	CLI_AddCmd("tone", "$p1 'duration' $p2 'freq'", 2, cmd_tone );
+	CLI_AddCmd("bridge", "bridge nextion uart to usb. $p1 bridge timeout in seconds, use 31250 or lower firmware upload baudrate nextion", 1, cmd_dispProgMode);
+	CLI_AddCmd("dfu", "Enter STM32 Bootloader, Use STM32CubeProgrammer UART mode for programming", 0, cmd_dfu);
+
+	/* Set PID parameters */
+	PID.Kp = PID_PARAM_KP;        /* Proporcional */
+	PID.Ki = PID_PARAM_KI;        /* Integral */
+	PID.Kd = PID_PARAM_KD;        /* Derivative */
+
+	/* Initialize PID system, float32_t format */
+	arm_pid_init_f32(&PID, 1);
+
+	/* Temp sensor init */
+	Max31865_init(&pt100, &hspi1, CS2_GPIO_Port, CS2_Pin, 3, 50);
+
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+//	mux_set(J2);
+//	Max31865_init(&Max31865_1, &hspi1, CS2_GPIO_Port, CS2_Pin, 3, 50);
+//	Max31865_init(&Max31865_2, &hspi1, CS1_GPIO_Port, CS1_Pin, 3, 50);
+
+	//Buzzer
+//	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+//	HAL_Delay(500);
+//	HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2);
+
+	/* Start Timers needed for AC control (Phase/on-off control & mains frequency measurement */
+	HAL_TIM_Base_Start_IT(&htim2); //ZC event input trigger and Phase control timer (Timer event trigger output used to sync TIM1 and TIM3)
+	HAL_TIM_Base_Start(&htim3); //Mains frequency measurement timebase
+	HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1); //Input capture used for sampling mains frequency
+	HAL_TIM_Base_Start_IT(&htim1); //on-off AC control timer
+
+	nextionWakeup();
+
+	//Start UART RX (used for CLI)
+	UART1_START_RX_IT();
+	UART2_START_RX_IT();
+
+	while (1) {
+		/* time management*/
+		prevTime = currTime;
+		currTime = HAL_GetTick();
+
+		if( prevTime > currTime )
+		{
+			//Overflow detected
+			prevTime = 0;
+			currTime = 0;
+		}
+
+		/* Temperature update */
+		if( tempUpdateTime <= currTime )
+		{
+			pt100isOK = Max31865_readTempC(&pt100,&t); //Temp variable t used even when invalid TODO
+			if( pt100isOK == true)
+			{
+				pt100Temp = Max31865_Filter(t,pt100Temp,0.1);   //  << For Smoothing data
+//				pt100Temp = t;
+
+#if 0
+				///START added for data acquisition TODO remove later
+				J3_Conf.powerPercent = setpoint;
+				J3_Conf.isSet = false; //update at next ZC
+				J4_Conf.powerPercent = setpoint;
+				J4_Conf.isSet = false; //update at next ZC
+
+				printf("%i,%.2f\n",(int)setpoint, t );
+				///END
+#endif
+			}
+			else
+			{
+				printf("temp error detected\n");
+			}
+
+//			printf("Temp=%.2f C\t TempLP=%.2f C\n", t, pt100Temp);
+			tempUpdateTime = currTime + tempUpdateInterval;
+		}
+		/* PID Update */
+		if( pidUpdateTime <= currTime )
+		{
+		    if( pidIsActive ){
+#ifndef MANUAL_OVERWRITE_PID
+		    	error = setpoint - pt100Temp;
+		    	pidOutput = (uint32_t)round(arm_pid_f32(&PID, error));
+#else
+		    	pidOutput = setpoint; //Use setpoint as fixed process input variable, handy for manual tuning (NOTE not limited)
+#endif
+
+		    	//limit output
+		    	if( pidOutput > 100) pidOutput = 100;
+		    	else if(pidOutput < 0) pidOutput = 0;
+
+			//	sprintf(resp,"setpoint=%.2f C\t Temp=%.2f C\t error=%.2f\t pidout=%.0f",s, t, e, pidOut );
+//				printf("setpoint=%.2f C\t Temp=%.2f C\t TempLP=%.2f C\t error=%.2f\t pidout=%.0f\n",setpoint, t, pt100Temp, error, pidOutput );
+		    	printf("%.2f, %i, %.2f\r\n",setpoint, (int)pidOutput, pt100Temp );
+
+				J3_Conf.powerPercent = pidOutput;
+				J3_Conf.isSet = false; //update at next ZC
+#ifdef REFLOW
+				//Reflow oven has additional heater
+				J4_Conf.powerPercent = pidOutput;
+				J4_Conf.isSet = false; //update at next ZC
+#endif
+		    }else{
+//		    	printf("Temp=%.2f C\t TempLP=%.2f C\n", t, pt100Temp);
+//		    	printf(".\n");
+		    	printf("%.2f, %i, %.2f\r\n",setpoint, (int)pidOutput, pt100Temp );
+		    }
+
+		    pidUpdateTime = currTime + pidUpdateInterval;
+		}
+		/* Display update */
+		if( dispUpdateTime <= currTime )
+		{
+			uint8_t buffer[50] = { ' ' };
+
+			//Update current temp
+#ifdef HOTPLATE
+			sprintf( (char*)buffer, "t0.txt=\"T: %7.2f C\"\xFF\xFF\xFF", t);
+#endif
+#ifdef REFLOW
+			sprintf( (char*)buffer, "t1.txt=\"T: %5.2f C\"\xFF\xFF\xFF", t);
+#endif
+			nextion_uart_transmit( (uint8_t*)buffer );
+
+			//Update setpoint
+#ifdef HOTPLATE
+			sprintf( (char*)buffer, "t1.txt=\"S: %4.0f C\"\xFF\xFF\xFF", setpoint);
+#endif
+#ifdef REFLOW
+			sprintf( (char*)buffer, "t4.txt=\"S: %4.0f C\"\xFF\xFF\xFF", setpoint);
+#endif
+			nextion_uart_transmit( (uint8_t*)buffer );
+
+		    dispUpdateTime = currTime + dispUpdateInterval;
+		}
+		/* Process Command Line Interface (CLI) commands */
+		if (cmdRdyFlg == 1) {
+			CLI_RunCmd(uart1RxBuff, uart1RxBuffLoc);
+			cmdRdyFlg = 0;
+			uart1RxBuffLoc = 0;
+			UART1_START_RX_IT();
+		}
+		/* Process Commands received form Nextion HMI display */
+		if (dispCmdRdyFlg == 1) {
+
+			if( memcmp((uint8_t[7]){0x65, 0x00, 0x05, 0x01, 0xFF, 0xFF, 0xFF },uart2RxBuff, 7 ) == 0){
+				//Right button pressed
+				setpoint = setpoint + 5;
+			}else if( memcmp((uint8_t[7]){0x65, 0x00, 0x04, 0x01, 0xFF, 0xFF, 0xFF },uart2RxBuff, 7 ) == 0){
+				//left button pressed
+				setpoint = setpoint - 5;
+			}else if( memcmp((uint8_t[4]){0x01, 0xFF, 0xFF, 0xFF },uart2RxBuff, 4 ) == 0){
+				//Active button OFF
+				printf("HOTPLATE ON\n");
+				HAL_GPIO_WritePin( RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
+				pidIsActive = true;
+
+				//Sound buzzer// TODO make propper function
+				uint16_t period = 50;
+				__HAL_TIM_SET_AUTORELOAD(&htim4, period);
+				__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, period/2);
+				HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+				HAL_Delay(500);
+				HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2);
+
+
+			}else if( memcmp((uint8_t[4]){0x00, 0xFF, 0xFF, 0xFF },uart2RxBuff, 4 )  == 0){
+				//Active button ON
+				printf("HOTPLATE OFF\n");
+				HAL_GPIO_WritePin( RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
+				pidIsActive = false;
+				arm_pid_reset_f32(&PID);
+				pidOutput = 0;
+
+				J3_Conf.powerPercent = 0;
+				J3_Conf.isSet = false; //update at next ZC
+				//Reflow oven has additional heater
+				J4_Conf.powerPercent = 0;
+				J4_Conf.isSet = false; //update at next ZC
+			}
+
+			dispCmdRdyFlg = 0;
+			uart2RxBuffLoc = 0;
+			UART2_START_RX_IT();
+		}
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+	}
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL16;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+  /** Initialize RTC Only
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.AsynchPrediv = RTC_AUTO_1_SECOND;
+  hrtc.Init.OutPut = RTC_OUTPUTSOURCE_ALARM;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
+
+}
+
+/**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_128;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 0;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 199;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_EXTERNAL1;
+  sSlaveConfig.InputTrigger = TIM_TS_ITR1;
+  if (HAL_TIM_SlaveConfigSynchro(&htim1, &sSlaveConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 6400;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 90;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OnePulse_Init(&htim2, TIM_OPMODE_SINGLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_TRIGGER;
+  sSlaveConfig.InputTrigger = TIM_TS_ETRF;
+  sSlaveConfig.TriggerPolarity = TIM_TRIGGERPOLARITY_NONINVERTED;
+  sSlaveConfig.TriggerPrescaler = TIM_TRIGGERPRESCALER_DIV1;
+  sSlaveConfig.TriggerFilter = 0;
+  if (HAL_TIM_SlaveConfigSynchro(&htim2, &sSlaveConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_ENABLE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.Pulse = 1;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 640;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 65535;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_DISABLE;
+  sSlaveConfig.InputTrigger = TIM_TS_ITR1;
+  if (HAL_TIM_SlaveConfigSynchro(&htim3, &sSlaveConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_TRC;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim3, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 640;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 50;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 500;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+  HAL_TIM_MspPostInit(&htim4);
+
+}
+
+/**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 115200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, MUX1_IN1_Pin|MUX1_IN2_Pin|MUX2_EN_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, MUX2_IN1_Pin|MUX2_IN2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, J3_Pin|RELAY_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, J4_Pin|J5_Pin|MUX1_EN_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, DBG_LED1_Pin|CS2_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pins : MUX1_IN1_Pin MUX1_IN2_Pin MUX2_EN_Pin */
+  GPIO_InitStruct.Pin = MUX1_IN1_Pin|MUX1_IN2_Pin|MUX2_EN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : MUX2_IN1_Pin MUX2_IN2_Pin */
+  GPIO_InitStruct.Pin = MUX2_IN1_Pin|MUX2_IN2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : J3_Pin RELAY_Pin CS2_Pin */
+  GPIO_InitStruct.Pin = J3_Pin|RELAY_Pin|CS2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : J4_Pin J5_Pin CS1_Pin MUX1_EN_Pin */
+  GPIO_InitStruct.Pin = J4_Pin|J5_Pin|CS1_Pin|MUX1_EN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : DBG_LED1_Pin */
+  GPIO_InitStruct.Pin = DBG_LED1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(DBG_LED1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure peripheral I/O remapping */
+  __HAL_AFIO_REMAP_PD01_ENABLE();
+
+}
+
+/* USER CODE BEGIN 4 */
+int __io_putchar(int ch) {
+	HAL_UART_Transmit(&huart1, (uint8_t*) &ch, 1, 0xFFFF);
+	return ch;
+}
+
+int _write(int file, char *ptr, int len) {
+	int DataIdx;
+	for (DataIdx = 0; DataIdx < len; DataIdx++) {
+		__io_putchar(*ptr++);
+	}
+	return len;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	/* UART1 = CLI; UART2=Nextion*/
+	if( huart->Instance == USART1){
+		if (cmdRdyFlg == 1) {
+			printf("Not so fast!, prev cmd not yet processed\n");
+			return;
+		}
+		if (uart1RxBuff[uart1RxBuffLoc] == '\n') {
+			cmdRdyFlg = 1;
+			return;
+		} else {
+			uart1RxBuffLoc++;
+			UART1_START_RX_IT();
+		}
+		if (uart1RxBuffLoc >= UART1_RX_BUFF_SIZE - 1) {
+			uart1RxBuffLoc = 0;
+			printf("cmd bufffer overun!\n");
+			UART1_START_RX_IT();
+		}
+	}else if( huart->Instance == USART2){
+		if (dispCmdRdyFlg == 1) {
+			printf("Not so fast!, prev nextion cmd not yet processed\n");
+			return;
+		}
+		if (uart2RxBuff[uart2RxBuffLoc] == 255) {
+			static uint8_t eolCnt = 0;
+			eolCnt++;
+
+			if( eolCnt >= 3)
+			{
+				dispCmdRdyFlg = 1;
+				eolCnt = 0;
+			}else
+			{
+				uart2RxBuffLoc++;
+				UART2_START_RX_IT();
+			}
+			return;
+		} else {
+			uart2RxBuffLoc++;
+			UART2_START_RX_IT();
+		}
+		if (uart2RxBuffLoc >= UART2_RX_BUFF_SIZE - 1) {
+			uart2RxBuffLoc = 0;
+			printf("cmd bufffer overun!\n");
+			UART2_START_RX_IT();
+		}
+	}
+
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+	__HAL_UART_FLUSH_DRREGISTER(huart);
+	uart1RxBuffLoc = 0; //reset buffer, data corrupted
+	UART1_START_RX_IT(); //An UART error has occurred, restart the interrupt based UART reception
+
+	uart2RxBuffLoc = 0; //reset buffer, data corrupted
+	UART2_START_RX_IT(); //An UART error has occurred, restart the interrupt based UART reception
+}
+
+uint8_t setPage(uint8_t *resp, uint8_t *page) {
+	uint8_t buffer[50] = { ' ' };
+	sprintf((char*) buffer, "dp=%s\xFF\xFF\xFF", page);
+
+	HAL_UART_Transmit(&huart2, buffer, 7, 100);
+	return 0;
+}
+
+uint8_t cmd_MAX31865_RegisterWrite(uint8_t *resp, uint8_t *regAdd,
+		uint8_t *regVal) {
+//	uint8_t buffer[50] = {' '};
+//	sprintf((char*)buffer, "dp=%s\xFF\xFF\xFF", page);
+//
+//	HAL_UART_Transmit(&huart2, buffer, 7, 100);
+
+	unsigned int registerAddress;
+	unsigned int registerValue;
+
+	sscanf((const char*) regAdd, "%x", &registerAddress);
+	sscanf((const char*) regVal, "%x", &registerValue);
+
+	sprintf((char*) resp, "Register Address: 0x%02X \t Register Value: 0x%02X",
+			registerAddress, registerValue);
+
+	uint8_t spiBuff[2] = { (uint8_t) registerAddress, (uint8_t) registerValue };
+
+	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(CS2_GPIO_Port, CS2_Pin, GPIO_PIN_SET);
+	//HAL_Delay(1); // // tCC = 400ns ; CS to SCLK Setup (dsheet psge 4)
+
+	if (HAL_SPI_Transmit(&hspi1, spiBuff, 2, 100) != HAL_OK)
+		return 1;
+	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_SET);
+
+	return 0;
+}
+
+uint8_t cmd_MAX31865_RegisterRead(uint8_t *resp, uint8_t *regAdd) {
+//	uint8_t buffer[50] = {' '};
+//	sprintf((char*)buffer, "dp=%s\xFF\xFF\xFF", page);
+//
+//	HAL_UART_Transmit(&huart2, buffer, 7, 100);
+
+	unsigned int registerAddress;
+	sscanf((const char*) regAdd, "%x", &registerAddress);
+
+	uint8_t RxData[1] = { 0 };
+	uint8_t TxData[1] = { (uint8_t) registerAddress };
+	;
+
+	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(CS2_GPIO_Port, CS2_Pin, GPIO_PIN_SET);
+	//HAL_Delay(1); // tCC = 400ns ; CS to SCLK Setup (dsheet psge 4)
+
+	if (HAL_SPI_Transmit(&hspi1, TxData, 1, 100) != HAL_OK)
+		return 1;
+	//HAL_Delay(1); //tCDD = 80ns; SCLK to Data Valid
+	if (HAL_SPI_Receive(&hspi1, RxData, 1, 100) != HAL_OK)
+		return 2;
+	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_SET);
+
+	sprintf((char*) resp, "Register Address: 0x%02X \t Register value: 0x%02X",
+			registerAddress, (unsigned int) (RxData[0]));
+
+	return 0;
+}
+
+uint8_t cmd_MAX31865_temp(uint8_t *resp) {
+	HAL_GPIO_WritePin(MUX1_EN_GPIO_Port, MUX1_EN_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(MUX2_EN_GPIO_Port, MUX2_EN_Pin, GPIO_PIN_RESET);
+
+	HAL_GPIO_WritePin(MUX1_IN1_GPIO_Port, MUX1_IN1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(MUX2_IN1_GPIO_Port, MUX2_IN1_Pin, GPIO_PIN_SET);
+
+	HAL_GPIO_WritePin(MUX1_IN2_GPIO_Port, MUX1_IN2_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(MUX2_IN2_GPIO_Port, MUX2_IN2_Pin, GPIO_PIN_SET);
+
+//	/* Write reg */
+//	uint8_t spiBuff[2] = {0x80,  0b11100011}; //vbias on; auto; 0; 2/4-wire;0;0;clc fault; 50hz
+//
+//	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_SET);
+//	HAL_GPIO_WritePin(CS2_GPIO_Port, CS2_Pin, GPIO_PIN_RESET);
+//	HAL_Delay(1); // // tCC = 400ns ; CS to SCLK Setup (dsheet psge 4)
+//
+//	if( HAL_SPI_Transmit(&hspi1, spiBuff, 2, 100) != HAL_OK) return 1;
+//	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_SET);
+//	HAL_GPIO_WritePin(CS2_GPIO_Port, CS2_Pin, GPIO_PIN_SET);
+//
+//	HAL_Delay(100); //
+//
+//	/*Read reg*/
+//	uint8_t RxData[2]= {0,0};
+//	uint8_t TxData[1] = {(uint8_t)0x01};;
+//
+//	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_SET);
+//	HAL_GPIO_WritePin(CS2_GPIO_Port, CS2_Pin, GPIO_PIN_RESET);
+//	//HAL_Delay(1); // tCC = 400ns ; CS to SCLK Setup (dsheet psge 4)
+//
+//	if( HAL_SPI_Transmit(&hspi1, TxData, 1, 100) != HAL_OK) return 1;
+//	//HAL_Delay(1); //tCDD = 80ns; SCLK to Data Valid
+//	if( HAL_SPI_Receive(&hspi1, RxData, 2, 100) != HAL_OK) return 2;
+//	HAL_GPIO_WritePin(CS1_GPIO_Port, CS1_Pin, GPIO_PIN_SET);
+//	HAL_GPIO_WritePin(CS2_GPIO_Port, CS2_Pin, GPIO_PIN_SET);
+//
+//	uint16_t raw = ( ( (uint16_t)RxData[0] ) >> 8 ) | (uint16_t)RxData[0];
+//	uint8_t fault = raw & 0x0001;
+//	raw = raw>>1;
+//
+//	sprintf(resp, "adc CODE (dec) = %d  fault: %d", (int)raw, (int)fault);
+	return 0;
+}
+
+uint8_t mux_set(rtdmux_t connDesig) {
+	//Disable MUX
+	HAL_GPIO_WritePin(MUX1_EN_GPIO_Port, MUX1_EN_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(MUX2_EN_GPIO_Port, MUX2_EN_Pin, GPIO_PIN_SET);
+
+	switch (connDesig) {
+	case J1:
+		HAL_GPIO_WritePin(MUX1_IN1_GPIO_Port, MUX1_IN1_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(MUX2_IN1_GPIO_Port, MUX2_IN1_Pin, GPIO_PIN_SET);
+
+		HAL_GPIO_WritePin(MUX1_IN2_GPIO_Port, MUX1_IN2_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(MUX2_IN2_GPIO_Port, MUX2_IN2_Pin, GPIO_PIN_SET);
+		break;
+	case J2:
+		HAL_GPIO_WritePin(MUX1_IN1_GPIO_Port, MUX1_IN1_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MUX2_IN1_GPIO_Port, MUX2_IN1_Pin, GPIO_PIN_RESET);
+
+		HAL_GPIO_WritePin(MUX1_IN2_GPIO_Port, MUX1_IN2_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(MUX2_IN2_GPIO_Port, MUX2_IN2_Pin, GPIO_PIN_SET);
+		break;
+	case J3:
+		HAL_GPIO_WritePin(MUX1_IN1_GPIO_Port, MUX1_IN1_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(MUX2_IN1_GPIO_Port, MUX2_IN1_Pin, GPIO_PIN_SET);
+
+		HAL_GPIO_WritePin(MUX1_IN2_GPIO_Port, MUX1_IN2_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MUX2_IN2_GPIO_Port, MUX2_IN2_Pin, GPIO_PIN_RESET);
+		break;
+	case J4:
+		HAL_GPIO_WritePin(MUX1_IN1_GPIO_Port, MUX1_IN1_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MUX2_IN1_GPIO_Port, MUX2_IN1_Pin, GPIO_PIN_RESET);
+
+		HAL_GPIO_WritePin(MUX1_IN2_GPIO_Port, MUX1_IN2_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MUX2_IN2_GPIO_Port, MUX2_IN2_Pin, GPIO_PIN_RESET);
+		break;
+	default:
+		//Do nothing
+		break;
+	}
+
+	//Enable MUX
+	HAL_GPIO_WritePin(MUX1_EN_GPIO_Port, MUX1_EN_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(MUX2_EN_GPIO_Port, MUX2_EN_Pin, GPIO_PIN_RESET);
+
+	return 0; //OK
+}
+
+uint16_t map(int32_t x, int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max) {
+	if( x < in_min)
+		return in_min;
+	else if( x > in_max )
+		return in_max;
+	else
+		return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+//uint8_t cmd_buzzer(char * resp)
+//{
+//	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+//
+//	HAL_TIM_
+//
+//	HAL_Delay(2000);
+//
+//	HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2);
+//}
+
+uint8_t cmd_setRelay(uint8_t *resp, uint8_t *newState) {
+	if (strcmp((char*) newState, "on") == 0) {
+		HAL_GPIO_WritePin( RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_SET);
+	} else if (strcmp((char*) newState, "off") == 0) {
+		HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, GPIO_PIN_RESET);
+	} else {
+		return 1; //Error
+	}
+
+	return 0;
+}
+
+uint8_t cmd_Reset(char *resp) {
+	HAL_NVIC_SystemReset(); //RESET system
+	return 1; //this Statement should not be reached.
+}
+
+uint8_t nextion_uart_transmit(uint8_t *buffer) {
+	if( HAL_UART_Transmit(&huart2, buffer, strlen((char*)buffer), 100) != HAL_OK)
+	{
+		return 1;
+	}
+	return 0;
+}
+
+//uint8_t nextion_uart_receive(uint8_t *buffer) {
+//
+//	HAL_UART_Receive(&huart2, buffer, 10, 500);
+//	if( HAL_UART_Transmit(&huart2, buffer, strlen((char*)buffer), 100) != HAL_OK)
+//	{
+//		return 1;
+//	}
+//	return 0;
+//}
+
+uint8_t cmd_setLoad(char *resp, char *target, char *ctrlMode,
+		char *powerPercent) {
+
+	return 0;
+}
+
+uint8_t cmd_getMainsPeriod(char *resp) {
+	sprintf(resp, "%i (Timer cnt)", (int) mainsPeriod);
+	return 0;
+}
+
+uint8_t cmd_getMainsFreq(char *resp) {
+	sprintf(resp, "%.0f Hz", round((double) (mainsPeriod + 1.0) / 20.0)); // +1 because timer start at zero
+	return 0;
+}
+
+uint8_t cmd_setMode(char *resp, char *target, char *ctrlMode) {
+	volatile loadConf_t *targetConf;
+
+	//Get Target config from string
+	if (strcmp(target, "J3") == 0) {
+		targetConf = &J3_Conf;
+	} else if (strcmp(target, "J4") == 0) {
+		targetConf = &J4_Conf;
+	} else if (strcmp(target, "J5") == 0) {
+		targetConf = &J5_Conf;
+	} else {
+		return 1; //error invalid target
+	}
+
+	//Get new ctrl mode
+	if (strcmp(ctrlMode, "phase") == 0) {
+		targetConf->mode = phaseAngleCtrl;
+	} else if (strcmp(ctrlMode, "onoff") == 0) {
+		targetConf->mode = onoffCtrl;
+	} else {
+		return 1; //error ctrl mode
+	}
+
+	targetConf->isSet = false;
+
+	sprintf(resp, "%s set to %s mode", target, ctrlMode);
+	return 0;
+}
+
+uint8_t cmd_setPower(char *resp, char *target, char *powerPercent) {
+	volatile loadConf_t *targetConf;
+
+	//Get Target config from string
+	if (strcmp(target, "J3") == 0) {
+		targetConf = &J3_Conf;
+	} else if (strcmp(target, "J4") == 0) {
+		targetConf = &J4_Conf;
+	} else if (strcmp(target, "J5") == 0) {
+		targetConf = &J5_Conf;
+	} else {
+		return 1; //error invalid target
+	}
+
+	//Get new power set-point
+	int32_t newPowerPercent = (int32_t) atoi(powerPercent);
+
+	if (newPowerPercent > 100) {
+		newPowerPercent = 100;
+	}
+
+	targetConf->powerPercent = newPowerPercent;
+	targetConf->isSet = false; //update at next ZC
+
+	sprintf(resp, "%s set to %i%% power", target, (int)newPowerPercent);
+	return 0;
+}
+
+uint8_t cmd_led(char *resp, char *p1)
+{
+	if (strcmp("on", p1) == 0) {
+		HAL_GPIO_WritePin(DBG_LED1_GPIO_Port, DBG_LED1_Pin, GPIO_PIN_RESET);
+	}else if(strcmp("off", p1) == 0)
+	{
+		HAL_GPIO_WritePin(DBG_LED1_GPIO_Port, DBG_LED1_Pin, GPIO_PIN_SET);
+	}else
+	{
+		return 1;
+	}
+	return 0;
+}
+
+uint8_t cmd_setPid(char *resp, char *state)
+{
+	if ( strcmp(state, "on") == 0 ){
+		//enable pid controller output
+		pidIsActive = true;
+	}else if ( strcmp(state, "off") == 0 ){
+		pidIsActive = false;
+	}else if ( strcmp(state, "reset") == 0 ){
+		arm_pid_reset_f32(&PID);
+	}else{
+		return 1;
+	}
+
+	return 0;
+}
+uint8_t cmd_setSetpoint(char *resp, char *newSetpoint)
+{
+	setpoint = atoi(newSetpoint);
+	sprintf(resp, "setpoint = %.2f", setpoint);
+	return 0;
+}
+
+uint8_t cmd_test(){
+//	arm_pid_init_f32 (arm_pid_instance_f32 *S, int32_t resetStateFlag)
+	return 0;
+}
+
+uint8_t cmd_tone(char *resp,char *freq, char *duration)
+{
+	uint16_t period = atoi(freq);
+
+	__HAL_TIM_SET_AUTORELOAD(&htim4, period);
+
+	__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, period/2);
+
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+
+	HAL_Delay(atoi(duration));
+
+	HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2);
+
+	return 0;
+}
+
+/**
+ * Bridge UART Nextion to USB, usefull for uploading firmware to the nextion display
+ * NOTE! Use low communication speed for uploading 9600, else communication can fail.
+ */
+
+#pragma GCC push_options
+#pragma GCC optimize ("Ofast")
+uint8_t cmd_dispProgMode(char *resp, char *duration)
+{
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+	HAL_UART_MspDeInit(&huart1);
+	HAL_UART_MspDeInit(&huart2);
+
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+    /**USART1 GPIO Configuration
+    PA9     ------> USART1_TX (Output)
+    PA10     ------> USART1_RX (Input)
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_9;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_10;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    /**USART2 GPIO Configuration
+    PA2     ------> USART2_TX (Output)
+    PA3     ------> USART2_RX (Input)
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_2;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_3;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    uint32_t timeStamp = HAL_GetTick();
+    uint32_t timeout = (uint32_t)atoi(duration);
+
+    /* Bridge UARTS by mirroring the GPIO pins */
+    printf("Nextion display connected to USB port for %i seconds, disconnect terminal and start upload form nextion editor\n", (int)timeout);
+
+	while( HAL_GetTick() < timeStamp + timeout*1000 )
+	{
+		HAL_GPIO_WritePin( GPIOA, GPIO_PIN_9, HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_3) );
+		HAL_GPIO_WritePin( GPIOA, GPIO_PIN_2, HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) );
+	}
+
+	/* Reinit UART for normal operation */
+	HAL_UART_MspInit(&huart1);
+	HAL_UART_MspInit(&huart2);
+
+	uart1RxBuffLoc = 0;
+	uart2RxBuffLoc = 0;
+
+	UART1_START_RX_IT();
+	UART2_START_RX_IT();
+
+
+	return 0;
+}
+#pragma GCC pop_options
+
+uint8_t cmd_dfu(char *resp)
+{
+	printf("Disconnect COM port from terminal and open flash utility, power cycle when complete\n\n");
+//	HAL_Delay(1000);
+
+	//set flag to restart to bootloader after reset.
+	rtc_write_backup_reg(DFU_FLG_BKU_REG,  DFU_FLG);
+	NVIC_SystemReset();
+
+	return 0;
+}
+
+uint32_t rtc_read_backup_reg(uint32_t BackupRegister) {
+    RTC_HandleTypeDef RtcHandle;
+    RtcHandle.Instance = RTC;
+    return HAL_RTCEx_BKUPRead(&RtcHandle, BackupRegister);
+}
+
+void rtc_write_backup_reg(uint32_t BackupRegister, uint32_t data) {
+    RTC_HandleTypeDef RtcHandle;
+    RtcHandle.Instance = RTC;
+    HAL_PWR_EnableBkUpAccess();
+    HAL_RTCEx_BKUPWrite(&RtcHandle, BackupRegister, data);
+    HAL_PWR_DisableBkUpAccess();
+}
+
+
+/*
+ * Changes the AC power setting if required.
+ * This function is called at the ZC event to prevent invalid output when changing the power setting
+ */
+uint8_t updateLoad(volatile loadConf_t *targetConf)
+{
+	uint16_t newOcVal = 0;
+	if( targetConf->isSet == true )
+	{
+		//Current configuration active, no changes needed
+		return 0;
+	}else{
+		//Set new power setting
+		if( targetConf->powerPercent == 0 )
+		{
+			//Special cases were timer output compare is not needed for control
+			HAL_TIM_OC_Stop_IT(&htim1, targetConf->timerChannel); //Stop on-off control
+			HAL_TIM_OC_Stop_IT(&htim2, targetConf->timerChannel); //Stop phase angle control
+
+			//Force output LOW
+			HAL_GPIO_WritePin(targetConf->GPIO_Port, targetConf->GPIO_Pin, GPIO_PIN_RESET);
+		}else if( targetConf->powerPercent == 100 ){
+			//Special cases were timer output compare is not needed for control
+			HAL_TIM_OC_Stop_IT(&htim1, targetConf->timerChannel); //Stop on-off control
+			HAL_TIM_OC_Stop_IT(&htim2, targetConf->timerChannel); //Stop phase angle control
+
+			//Forge output HIGH
+			HAL_GPIO_WritePin(targetConf->GPIO_Port, targetConf->GPIO_Pin, GPIO_PIN_SET);
+		}else if (targetConf->mode == phaseAngleCtrl) {
+
+			newOcVal = map(targetConf->powerPercent, 1, 99, htim2.Init.Period, 1); //Calc OC val based on power setpoint
+			__HAL_TIM_SET_COMPARE(&htim2, targetConf->timerChannel, newOcVal );
+
+			HAL_TIM_OC_Stop_IT(&htim1, targetConf->timerChannel); //Turn off output on-off ctrl, just in case
+			HAL_TIM_OC_Start_IT(&htim2, targetConf->timerChannel); //Turn on output phase control
+		} else if (targetConf->mode == onoffCtrl) {
+			newOcVal = map(targetConf->powerPercent, 1, 99, (htim1.Init.Period / 2), 1) * 2; //divide and multiply by 2 to make sure it is an even number
+			__HAL_TIM_SET_COMPARE(&htim1, targetConf->timerChannel, newOcVal );
+
+			HAL_TIM_OC_Stop_IT(&htim2, targetConf->timerChannel); //Turn off output phase angle control, just in case
+			HAL_TIM_OC_Start_IT(&htim1, targetConf->timerChannel); //Turn on output on-off ctrl
+		}
+		targetConf->isSet = true;
+	}
+	return 0;
+}
+
+/**
+ * TIM2 is used for phase angle control mode, this interrupt is called when the firing angle is reached.
+ * When a ZC event is detected TIM2 is started in onepulse mode, the output compare value (OC)
+ * determines the activation point (firing angle), when the pulse ends the output is turned of (see other ISR, period elapsed)
+ *
+ * TIM1 is used for onoff control mode, The timer uses the ZC events as clock source (every ZC the counter is incremented)
+ * The timer period equals the amount of half sine wave present in a full onoff cycle.
+ * The OC value determines the moment when the triac is turned on, setting the OC at half the onoff cycle period results in 50% power.
+ */
+void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance == TIM2) {
+		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+			HAL_GPIO_WritePin(J3_GPIO_Port, J3_Pin, GPIO_PIN_SET);
+		else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
+			HAL_GPIO_WritePin(J4_GPIO_Port, J4_Pin, GPIO_PIN_SET);
+		else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4)
+			HAL_GPIO_WritePin(J5_GPIO_Port, J5_Pin, GPIO_PIN_SET);
+	} else if (htim->Instance == TIM1) {
+		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+			HAL_GPIO_WritePin(J3_GPIO_Port, J3_Pin, GPIO_PIN_SET);
+		else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
+			HAL_GPIO_WritePin(J4_GPIO_Port, J4_Pin, GPIO_PIN_SET);
+		else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4)
+			HAL_GPIO_WritePin(J5_GPIO_Port, J5_Pin, GPIO_PIN_SET);
+	}
+}
+
+/**
+ *  Turn off output if phase angle trigger delay has expired or the end of a onoff cycle, do not turn off output at power=100%
+ *  Note the triac in phaseAngleCtrl mode is turned off before the end of the period, this does not matter because the
+ *  NOTE!: Triac's keep conducting until current reaches zero, with non resistive loads the control pulse length might need to be decreased.
+ */
+//End of triac control pulse window, turn off triacs before next ZC event (Note triac keeps conducting untill ZC)
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance == TIM2) {
+		if (J3_Conf.powerPercent != 100 && J3_Conf.mode == phaseAngleCtrl )
+			HAL_GPIO_WritePin(J3_Conf.GPIO_Port, J3_Conf.GPIO_Pin, GPIO_PIN_RESET);
+		if (J4_Conf.powerPercent != 100 && J4_Conf.mode == phaseAngleCtrl )
+			HAL_GPIO_WritePin(J4_Conf.GPIO_Port, J4_Conf.GPIO_Pin, GPIO_PIN_RESET);
+		if (J5_Conf.powerPercent != 100 && J5_Conf.mode == phaseAngleCtrl )
+			HAL_GPIO_WritePin(J5_Conf.GPIO_Port, J5_Conf.GPIO_Pin, GPIO_PIN_RESET);
+	} else if (htim->Instance == TIM1) {
+		if (J3_Conf.powerPercent != 100 && J3_Conf.mode == onoffCtrl )
+			HAL_GPIO_WritePin(J3_Conf.GPIO_Port, J3_Conf.GPIO_Pin, GPIO_PIN_RESET);
+		if (J4_Conf.powerPercent != 100 && J4_Conf.mode == onoffCtrl )
+			HAL_GPIO_WritePin(J4_Conf.GPIO_Port, J4_Conf.GPIO_Pin, GPIO_PIN_RESET);
+		if (J5_Conf.powerPercent != 100 && J5_Conf.mode == onoffCtrl )
+			HAL_GPIO_WritePin(J5_Conf.GPIO_Port, J5_Conf.GPIO_Pin, GPIO_PIN_RESET);
+	}
+}
+
+/**
+ * TIM3 is used to measure the mains frequency. And turn on load if power setting is 100%
+ * The ZC event is timestamped using input capture mode of this timer and the period between
+ * two event is calculated to determine the frequency.
+ */
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance == TIM3) {
+		/* Update load configurations at ZC event*/
+		updateLoad(&J3_Conf);
+		updateLoad(&J4_Conf);
+		updateLoad(&J5_Conf);
+
+		/*If power setting is 100%, turn on load at ZC event*/
+		if (J3_Conf.powerPercent == 100 )
+			HAL_GPIO_WritePin(J3_Conf.GPIO_Port, J3_Conf.GPIO_Pin, GPIO_PIN_SET);
+		if (J4_Conf.powerPercent == 100 )
+			HAL_GPIO_WritePin(J4_Conf.GPIO_Port, J4_Conf.GPIO_Pin, GPIO_PIN_SET);
+		if (J5_Conf.powerPercent == 100 )
+			HAL_GPIO_WritePin(J5_Conf.GPIO_Port, J5_Conf.GPIO_Pin, GPIO_PIN_SET);
+
+		/* Calculate mains frequency */
+		zcIcPrev = zcIcCurr;
+		zcIcCurr = __HAL_TIM_GET_COMPARE(&htim3, TIM_CHANNEL_1);
+
+		if (zcIcCurr >= zcIcPrev) {
+			mainsPeriod = zcIcCurr - zcIcPrev;
+		} else {
+			//Timer overflowed in between captures,
+			//Do nothing, just calculate next capture without ovf
+		}
+	}
+}
+
+void JumpToBootloader(void) {
+
+void (*SysMemBootJump)(void);
+volatile uint32_t addr = 0x1FFFF000;
+
+/**
+* Step: Disable RCC, set it to default (after reset) settings
+* Internal clock, no PLL, etc.
+*/
+#if defined(USE_HAL_DRIVER)
+HAL_RCC_DeInit();
+#endif /* defined(USE_HAL_DRIVER) */
+#if defined(USE_STDPERIPH_DRIVER)
+RCC_DeInit();
+#endif /* defined(USE_STDPERIPH_DRIVER) */
+
+/**
+* Step: Disable systick timer and reset it to default values
+*/
+SysTick->CTRL = 0;
+SysTick->LOAD = 0;
+SysTick->VAL = 0;
+
+/**
+* Step: Disable all interrupts
+*/
+__disable_irq();
+
+/**
+* Step: Set jump memory location for system memory
+* Use address with 4 bytes offset which specifies jump location where program starts
+*/
+SysMemBootJump = (void (*)(void)) (*((uint32_t *)(addr + 4)));
+
+/**
+* Step: Set main stack pointer.
+* This step must be done last otherwise local variables in this function
+* don't have proper value since stack pointer is located on different position
+*
+* Set direct address location which specifies stack pointer in SRAM location
+*/
+__set_MSP(*(uint32_t *)addr);
+
+SysMemBootJump();
+}
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+	/* User can add his own implementation to report the HAL error return state */
+
+  /* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

@@ -1,0 +1,5 @@
+display.c:14:14:map	24	static
+display.c:20:9:nextion_setText	72	static
+display.c:29:7:temp2string	8	static
+display.c:35:9:nextion_add2wave	48	static
+display.c:71:9:nextionWakeup	8	static

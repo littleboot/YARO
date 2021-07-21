@@ -1,0 +1,784 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Settings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <SettingsName>YAT Terminal Settings</SettingsName>
+  <SettingsVersion>1.7.0</SettingsVersion>
+  <ProductVersion>2.1.0</ProductVersion>
+  <Warning>Modifying structure and/or content may cause undefined behavior!</Warning>
+  <Mark>
+    <TimeStamp>2021-07-21T11:35:02.3526763+02:00</TimeStamp>
+    <UserName>Admin</UserName>
+  </Mark>
+  <AutoSaved>false</AutoSaved>
+  <Explicit>
+    <LogIsOn>true</LogIsOn>
+    <UserName />
+    <Terminal>
+      <TerminalType>Text</TerminalType>
+      <IO>
+        <IOType>SerialPort</IOType>
+        <SerialPort>
+          <PortId>
+            <Name>COM7</Name>
+          </PortId>
+          <Communication>
+            <BaudRate>115200</BaudRate>
+            <DataBits>Eight</DataBits>
+            <Parity>None</Parity>
+            <StopBits>One</StopBits>
+            <FlowControl>None</FlowControl>
+            <RtsPin>Disabled</RtsPin>
+            <DtrPin>Disabled</DtrPin>
+          </Communication>
+          <AliveMonitor>
+            <Enabled>true</Enabled>
+            <Interval>500</Interval>
+          </AliveMonitor>
+          <AutoReopen>
+            <Enabled>true</Enabled>
+            <Interval>2000</Interval>
+          </AutoReopen>
+          <OutputBufferSize>
+            <Enabled>false</Enabled>
+            <Size>2048</Size>
+          </OutputBufferSize>
+          <BufferMaxBaudRate>true</BufferMaxBaudRate>
+          <MaxChunkSize>
+            <Enabled>true</Enabled>
+            <Size>48</Size>
+          </MaxChunkSize>
+          <MaxSendRate>
+            <Enabled>false</Enabled>
+            <Size>48</Size>
+            <Interval>10</Interval>
+          </MaxSendRate>
+          <IgnoreFramingErrors>false</IgnoreFramingErrors>
+          <NoSendOnOutputBreak>true</NoSendOnOutputBreak>
+          <NoSendOnInputBreak>false</NoSendOnInputBreak>
+        </SerialPort>
+        <Socket>
+          <Type>TcpAutoSocket</Type>
+          <RemoteHost>[localhost]</RemoteHost>
+          <RemoteTcpPort>10000</RemoteTcpPort>
+          <RemoteUdpPort>10000</RemoteUdpPort>
+          <LocalInterface>
+            <Description>[any]</Description>
+            <Address>0.0.0.0</Address>
+          </LocalInterface>
+          <LocalFilter>[any]</LocalFilter>
+          <LocalTcpPort>10000</LocalTcpPort>
+          <LocalUdpPort>10000</LocalUdpPort>
+          <TcpClientAutoReconnect>
+            <Enabled>true</Enabled>
+            <Interval>500</Interval>
+          </TcpClientAutoReconnect>
+          <UdpServerSendMode>MostRecent</UdpServerSendMode>
+        </Socket>
+        <UsbSerialHidDevice>
+          <DeviceInfo>
+            <VendorId>0</VendorId>
+            <ProductId>0</ProductId>
+            <SerialNumber />
+          </DeviceInfo>
+          <MatchSerial>true</MatchSerial>
+          <Preset>None</Preset>
+          <ReportFormat>
+            <UseId>true</UseId>
+            <Id>0</Id>
+            <PrependPayloadByteLength>false</PrependPayloadByteLength>
+            <AppendTerminatingZero>false</AppendTerminatingZero>
+            <FillLastReport>true</FillLastReport>
+          </ReportFormat>
+          <RxFilterUsage>
+            <SeparateRxId>false</SeparateRxId>
+            <AnyRxId>false</AnyRxId>
+            <RxId>0</RxId>
+          </RxFilterUsage>
+          <FlowControl>None</FlowControl>
+          <AutoOpen>true</AutoOpen>
+          <IncludeNonPayloadData>false</IncludeNonPayloadData>
+        </UsbSerialHidDevice>
+        <Endianness>BigEndian</Endianness>
+        <IndicateSerialPortBreakStates>false</IndicateSerialPortBreakStates>
+        <SerialPortOutputBreakIsModifiable>false</SerialPortOutputBreakIsModifiable>
+      </IO>
+      <Status>
+        <ShowConnectTime>false</ShowConnectTime>
+        <ShowCountAndRate>false</ShowCountAndRate>
+        <ShowFlowControlCount>false</ShowFlowControlCount>
+        <ShowBreakCount>false</ShowBreakCount>
+      </Status>
+      <Buffer>
+        <TxBufferSize>65536</TxBufferSize>
+        <RxBufferSize>65536</RxBufferSize>
+      </Buffer>
+      <Display>
+        <SeparateTxRxRadix>false</SeparateTxRxRadix>
+        <TxRadix>String</TxRadix>
+        <RxRadix>String</RxRadix>
+        <ShowRadix>false</ShowRadix>
+        <ShowLineNumbers>false</ShowLineNumbers>
+        <LineNumberSelection>Total</LineNumberSelection>
+        <ShowTimeStamp>false</ShowTimeStamp>
+        <TimeStampFormat>HH:mm:ss.fff</TimeStampFormat>
+        <TimeStampUseUTC>false</TimeStampUseUTC>
+        <ShowTimeSpan>false</ShowTimeSpan>
+        <TimeSpanFormat>[d \days ][h][h\:][m]m\:ss\.fff</TimeSpanFormat>
+        <ShowTimeDelta>false</ShowTimeDelta>
+        <TimeDeltaFormat>[d \days ][h][h\:][m][m\:][s]s\.fff</TimeDeltaFormat>
+        <ShowPort>false</ShowPort>
+        <ShowDirection>false</ShowDirection>
+        <ShowLength>false</ShowLength>
+        <LengthSelection>CharCount</LengthSelection>
+        <ShowDuration>false</ShowDuration>
+        <TimeDurationFormat>[d \days ][h][h\:][m][m\:][s]s\.fff</TimeDurationFormat>
+        <IncludePortControl>false</IncludePortControl>
+        <PortLineBreakEnabled>true</PortLineBreakEnabled>
+        <DirectionLineBreakEnabled>true</DirectionLineBreakEnabled>
+        <ChunkLineBreakEnabled>false</ChunkLineBreakEnabled>
+        <MaxLineCount>1000</MaxLineCount>
+        <MaxLineLength>1000</MaxLineLength>
+        <ShowCopyOfActiveLine>false</ShowCopyOfActiveLine>
+        <InfoSeparator> </InfoSeparator>
+        <InfoEnclosure>()</InfoEnclosure>
+      </Display>
+      <CharReplace>
+        <ReplaceControlChars>false</ReplaceControlChars>
+        <ControlCharRadix>AsciiMnemonic</ControlCharRadix>
+        <ReplaceBackspace>false</ReplaceBackspace>
+        <ReplaceTab>false</ReplaceTab>
+        <ReplaceSpace>false</ReplaceSpace>
+      </CharReplace>
+      <CharHide>
+        <HideXOnXOff>false</HideXOnXOff>
+        <Hide0x00>false</Hide0x00>
+        <Hide0xFF>false</Hide0xFF>
+      </CharHide>
+      <CharAction>
+        <BeepOnBell>false</BeepOnBell>
+      </CharAction>
+      <Send>
+        <UseExplicitDefaultRadix>true</UseExplicitDefaultRadix>
+        <CopyPredefined>false</CopyPredefined>
+        <Text>
+          <KeepSendText>true</KeepSendText>
+          <SendImmediately>false</SendImmediately>
+          <EnableEscapes>false</EnableEscapes>
+        </Text>
+        <File>
+          <SkipEmptyLines>false</SkipEmptyLines>
+          <EnableEscapes>false</EnableEscapes>
+        </File>
+        <DefaultDelay>100</DefaultDelay>
+        <DefaultLineDelay>100</DefaultLineDelay>
+        <DefaultLineInterval>100</DefaultLineInterval>
+        <DefaultLineRepeat>-1</DefaultLineRepeat>
+        <SignalXOnBeforeEachTransmission>false</SignalXOnBeforeEachTransmission>
+        <SignalXOnPeriodically>
+          <Enabled>false</Enabled>
+          <Interval>1000</Interval>
+        </SignalXOnPeriodically>
+      </Send>
+      <TextTerminal>
+        <SeparateTxRxEol>false</SeparateTxRxEol>
+        <TxEol>&lt;LF&gt;</TxEol>
+        <RxEol>&lt;LF&gt;</RxEol>
+        <Encoding>1252</Encoding>
+        <ShowEol>true</ShowEol>
+        <SeparateTxRxDisplay>false</SeparateTxRxDisplay>
+        <TxDisplay>
+          <LengthLineBreak>
+            <Enabled>false</Enabled>
+            <Length>80</Length>
+          </LengthLineBreak>
+          <TimedLineBreak>
+            <Enabled>false</Enabled>
+            <Timeout>500</Timeout>
+          </TimedLineBreak>
+        </TxDisplay>
+        <RxDisplay>
+          <LengthLineBreak>
+            <Enabled>false</Enabled>
+            <Length>80</Length>
+          </LengthLineBreak>
+          <TimedLineBreak>
+            <Enabled>false</Enabled>
+            <Timeout>500</Timeout>
+          </TimedLineBreak>
+        </RxDisplay>
+        <LineSendDelay>
+          <Enabled>false</Enabled>
+          <Delay>500</Delay>
+          <LineInterval>1</LineInterval>
+        </LineSendDelay>
+        <WaitForResponse>
+          <Enabled>false</Enabled>
+          <Timeout>500</Timeout>
+        </WaitForResponse>
+        <CharSubstitution>None</CharSubstitution>
+        <TextExclusion>
+          <Enabled>false</Enabled>
+          <Patterns>\s*//(?=(?:(?:\\.|[^"\\])*"(?:\\.|[^"\\])*")*(?:\\.|[^"\\])*$).*$</Patterns>
+          <Patterns>/\*(?=(?:(?:\\.|[^"\\])*"(?:\\.|[^"\\])*")*(?:\\.|[^"\\])*$).*\*/</Patterns>
+          <Patterns>^\s*/\*(?=(?:(?:\\.|[^"\\])*"(?:\\.|[^"\\])*")*(?:\\.|[^"\\])*$).*\*/\s*$</Patterns>
+          <Patterns>\s*#(?=(?:(?:\\.|[^"\\])*"(?:\\.|[^"\\])*")*(?:\\.|[^"\\])*$).*$</Patterns>
+          <Patterns>^\s*(REM|::)(?=(?:(?:\\.|[^"\\])*"(?:\\.|[^"\\])*")*(?:\\.|[^"\\])*$)\s*.*$</Patterns>
+          <Patterns>\s*&amp;\s*(REM|::)(?=(?:(?:\\.|[^"\\])*"(?:\\.|[^"\\])*")*(?:\\.|[^"\\])*$)\s*.*$</Patterns>
+          <Patterns>%=(?=(?:(?:\\.|[^"\\])*"(?:\\.|[^"\\])*")*(?:\\.|[^"\\])*$).*=%</Patterns>
+        </TextExclusion>
+      </TextTerminal>
+      <BinaryTerminal>
+        <SeparateTxRxDisplay>false</SeparateTxRxDisplay>
+        <TxDisplay>
+          <LengthLineBreak>
+            <Enabled>true</Enabled>
+            <Length>16</Length>
+          </LengthLineBreak>
+          <SequenceLineBreakBefore>
+            <Enabled>false</Enabled>
+            <Sequence>ABC</Sequence>
+          </SequenceLineBreakBefore>
+          <SequenceLineBreakAfter>
+            <Enabled>false</Enabled>
+            <Sequence>\h(00)</Sequence>
+          </SequenceLineBreakAfter>
+          <TimedLineBreak>
+            <Enabled>false</Enabled>
+            <Timeout>500</Timeout>
+          </TimedLineBreak>
+        </TxDisplay>
+        <RxDisplay>
+          <LengthLineBreak>
+            <Enabled>true</Enabled>
+            <Length>16</Length>
+          </LengthLineBreak>
+          <SequenceLineBreakBefore>
+            <Enabled>false</Enabled>
+            <Sequence>ABC</Sequence>
+          </SequenceLineBreakBefore>
+          <SequenceLineBreakAfter>
+            <Enabled>false</Enabled>
+            <Sequence>\h(00)</Sequence>
+          </SequenceLineBreakAfter>
+          <TimedLineBreak>
+            <Enabled>false</Enabled>
+            <Timeout>500</Timeout>
+          </TimedLineBreak>
+        </RxDisplay>
+      </BinaryTerminal>
+    </Terminal>
+    <PredefinedCommand>
+      <PageLayout>OneByOne</PageLayout>
+      <Pages>
+        <PageName>Page 1</PageName>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>help</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>help</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>reset</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>reset</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>relay on</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>relay on</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>relay off</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>relay off</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>mains</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>mains</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>set J5 100</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>set J5 100</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>set J4 100</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>set J4 100</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>set J4 50</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>set J4 50</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>set J4 0</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>set J4 0</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>[empty]</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines />
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>[empty]</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines />
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+        <Commands>
+          <IsDefined>true</IsDefined>
+          <Description>set J5 0</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>set J5 0</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Commands>
+      </Pages>
+    </PredefinedCommand>
+    <AutoResponse>
+      <Trigger>[None]</Trigger>
+      <Response>[None]</Response>
+    </AutoResponse>
+    <AutoAction>
+      <Trigger>[None]</Trigger>
+      <Action>[None]</Action>
+    </AutoAction>
+    <Format>
+      <Font>
+        <Name>DejaVu Sans Mono</Name>
+        <Size>8.25</Size>
+        <Style>Regular</Style>
+      </Font>
+      <FormattingEnabled>true</FormattingEnabled>
+      <TxDataFormat>
+        <Color>Yellow</Color>
+        <FontStyle>Bold</FontStyle>
+      </TxDataFormat>
+      <TxControlFormat>
+        <Color>#FF8080</Color>
+        <FontStyle>Regular</FontStyle>
+      </TxControlFormat>
+      <RxDataFormat>
+        <Color>#00FF40</Color>
+        <FontStyle>Bold</FontStyle>
+      </RxDataFormat>
+      <RxControlFormat>
+        <Color>Fuchsia</Color>
+        <FontStyle>Regular</FontStyle>
+      </RxControlFormat>
+      <TimeStampFormat>
+        <Color>White</Color>
+        <FontStyle>Regular</FontStyle>
+      </TimeStampFormat>
+      <TimeSpanFormat>
+        <Color>White</Color>
+        <FontStyle>Regular</FontStyle>
+      </TimeSpanFormat>
+      <TimeDeltaFormat>
+        <Color>White</Color>
+        <FontStyle>Regular</FontStyle>
+      </TimeDeltaFormat>
+      <TimeDurationFormat>
+        <Color>White</Color>
+        <FontStyle>Regular</FontStyle>
+      </TimeDurationFormat>
+      <PortFormat>
+        <Color>White</Color>
+        <FontStyle>Regular</FontStyle>
+      </PortFormat>
+      <DirectionFormat>
+        <Color>White</Color>
+        <FontStyle>Regular</FontStyle>
+      </DirectionFormat>
+      <LengthFormat>
+        <Color>White</Color>
+        <FontStyle>Regular</FontStyle>
+      </LengthFormat>
+      <WhiteSpacesFormat>
+        <Color>Black</Color>
+        <FontStyle>Regular</FontStyle>
+      </WhiteSpacesFormat>
+      <IOControlFormat>
+        <Color>Gold</Color>
+        <FontStyle>Bold</FontStyle>
+      </IOControlFormat>
+      <ErrorFormat>
+        <Color>DarkOrange</Color>
+        <FontStyle>Bold</FontStyle>
+      </ErrorFormat>
+      <BackFormat>
+        <Color>Black</Color>
+      </BackFormat>
+    </Format>
+    <Log>
+      <RootPath>C:\Users\Admin\Documents\YAT</RootPath>
+      <RootFileName>YAT-Log</RootFileName>
+      <PortLog>false</PortLog>
+      <PortExtension>.log</PortExtension>
+      <RawLogTx>false</RawLogTx>
+      <RawLogBidir>false</RawLogBidir>
+      <RawLogRx>false</RawLogRx>
+      <RawExtension>.dat</RawExtension>
+      <NeatLogTx>false</NeatLogTx>
+      <NeatLogBidir>true</NeatLogBidir>
+      <NeatLogRx>false</NeatLogRx>
+      <NeatExtension>.log</NeatExtension>
+      <NameType>false</NameType>
+      <NameDirection>false</NameDirection>
+      <NameDate>true</NameDate>
+      <NameTime>true</NameTime>
+      <NameSeparator>-</NameSeparator>
+      <FolderType>false</FolderType>
+      <FolderDirection>false</FolderDirection>
+      <WriteMode>Create</WriteMode>
+      <TextEncoding>UTF8</TextEncoding>
+      <EmitEncodingPreamble>true</EmitEncodingPreamble>
+    </Log>
+  </Explicit>
+  <Implicit>
+    <TerminalIsStarted>true</TerminalIsStarted>
+    <SendText>
+      <Command>
+        <IsDefined>true</IsDefined>
+        <Description>led on</Description>
+        <DefaultRadix>String</DefaultRadix>
+        <CommandLines>led on</CommandLines>
+        <IsFilePath>false</IsFilePath>
+        <FilePath />
+      </Command>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>led on</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>led on</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-21T11:31:17.9537833+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>relay on</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>relay on</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-21T11:31:05.5531839+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>mains</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>mains</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-21T11:30:47.5915671+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>help</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>help</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-21T11:30:35.6133936+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>reset</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>reset</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-21T11:30:27.4455575+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>dfu</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>dfu</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-20T22:42:45.5778959+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 12</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 12</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-18T20:38:30.7153803+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>relay off</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>relay off</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-18T18:30:17.1736299+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 250</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 250</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T22:02:41.5032126+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>pid off</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>pid off</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T20:08:36.5745128+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>pid on</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>pid on</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T20:07:36.5837187+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 150</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 150</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T20:07:32.7188257+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 130</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 130</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T19:31:14.2031539+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>set J5 0</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>set J5 0</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T19:31:01.3758844+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>set J5 100</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>set J5 100</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T19:27:29.1719367+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 120</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 120</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T19:16:24.5208197+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>pid of</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>pid of</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T19:11:44.4982153+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 0</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 0</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T17:08:27.508302+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 100</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 100</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T17:08:02.3887972+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 45</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 45</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T17:06:59.284166+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 5</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 5</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T16:50:58.0808498+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 55</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 55</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T16:46:20.3552034+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>setpoint 30</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>setpoint 30</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T16:40:40.9294989+02:00</TimeStamp>
+      </RecentCommands>
+      <RecentCommands>
+        <Item>
+          <IsDefined>true</IsDefined>
+          <Description>bridge 80</Description>
+          <DefaultRadix>String</DefaultRadix>
+          <CommandLines>bridge 80</CommandLines>
+          <IsFilePath>false</IsFilePath>
+          <FilePath />
+        </Item>
+        <TimeStamp>2021-07-17T16:35:52.5049522+02:00</TimeStamp>
+      </RecentCommands>
+    </SendText>
+    <SendFile>
+      <Command>
+        <IsDefined>false</IsDefined>
+        <Description />
+        <DefaultRadix>String</DefaultRadix>
+        <CommandLines />
+        <IsFilePath>false</IsFilePath>
+        <FilePath />
+      </Command>
+    </SendFile>
+    <Predefined>
+      <SelectedPageId>1</SelectedPageId>
+    </Predefined>
+    <Window>
+      <State>Maximized</State>
+      <Location>
+        <X>0</X>
+        <Y>0</Y>
+      </Location>
+      <Size>
+        <Width>900</Width>
+        <Height>675</Height>
+      </Size>
+    </Window>
+    <Layout>
+      <TxMonitorPanelIsVisible>false</TxMonitorPanelIsVisible>
+      <BidirMonitorPanelIsVisible>true</BidirMonitorPanelIsVisible>
+      <RxMonitorPanelIsVisible>false</RxMonitorPanelIsVisible>
+      <MonitorOrientation>Vertical</MonitorOrientation>
+      <TxMonitorSplitterRatio>0.333333343</TxMonitorSplitterRatio>
+      <RxMonitorSplitterRatio>0.5</RxMonitorSplitterRatio>
+      <PredefinedPanelIsVisible>true</PredefinedPanelIsVisible>
+      <PredefinedSplitterRatio>0.75</PredefinedSplitterRatio>
+      <SendTextPanelIsVisible>true</SendTextPanelIsVisible>
+      <SendFilePanelIsVisible>true</SendFilePanelIsVisible>
+    </Layout>
+  </Implicit>
+</Settings>

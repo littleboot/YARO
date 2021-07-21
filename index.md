@@ -2,9 +2,11 @@
 Yet Another Reflow Oven. An open source DIY Reflow Hotplate and Vapour phase controller including build instruction. 
 
 ### Result
+![Terminal example 1](/Images/Terminal_CLI_example1.png)
 
-### Project origin
-I wanted to have a reflow oven so I could easilly solder electronic prototypes. After looking around I found plenty of DIY projects but none of them fitted my needs.
+
+### Intro
+I wanted to have a reflow oven so I could easilly solder electronic prototypes. After looking around I found plenty of DIY projects but none of them fitted my needs. This is why I designed my own I hope you like it, for me it has been quite a journey. From failed and forgotton projects to a functinal Hotplate and Reflow oven (with active cooling).
 #### Which type of device would I need?
 After looking around the internet there are multiple automated soldering techniques / machines.
 - vapour phase
